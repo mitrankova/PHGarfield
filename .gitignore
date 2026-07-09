@@ -1,0 +1,37 @@
+*.root
+*.log
+*.out
+*.err
+*.o
+*.so
+*.pcm
+*.d
+*.la
+*.lo
+.libs/
+.deps/
+build/
+install/
+autom4te.cache/
+Makefile
+Makefile.in
+config.*
+configure
+aclocal.m4
+libtool
+
+# autotools generated files for InModuleTrackDisplay
+InModuleTrackDisplay/compile
+InModuleTrackDisplay/depcomp
+InModuleTrackDisplay/install-sh
+InModuleTrackDisplay/ltmain.sh
+InModuleTrackDisplay/missing
+
+# local directories / other working areas
+LoadCheck/
+TPC_pattern_reco/
+macro/plots/
+
+# image/text outputs
+*.png
+*.txt
