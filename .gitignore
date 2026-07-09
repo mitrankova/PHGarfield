@@ -21,11 +21,11 @@ aclocal.m4
 libtool
 
 # autotools generated files for InModuleTrackDisplay
-InModuleTrackDisplay/compile
-InModuleTrackDisplay/depcomp
-InModuleTrackDisplay/install-sh
-InModuleTrackDisplay/ltmain.sh
-InModuleTrackDisplay/missing
+compile
+depcomp
+install-sh
+ltmain.sh
+missing
 
 # local directories / other working areas
 LoadCheck/
