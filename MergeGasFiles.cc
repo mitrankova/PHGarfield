@@ -1,218 +1,212 @@
+#include <Garfield/MediumMagboltz.hh>
+#include <phool/phool.h>
+
 #include <filesystem>
 #include <iostream>
+#include <map>
+#include <regex>
+#include <set>
 #include <string>
-#include <TRandom3.h>
-#include <ctime>
-#include <TMath.h>
+#include <utility>
+#include <sstream>
+#include <iomanip>
+#include <exception>
 
-#include <TNtuple.h>
-#include <TFile.h>
 
-#include "Garfield/MediumMagboltz.hh"
+namespace fs = std::filesystem;
+std::string mergedName(const std::string& path, unsigned int eindex);
 
-using namespace std;
+bool searchAndUnpackDirectory(
+    const std::string& directoryPath,
+    std::set<unsigned int>& Eindices,
+    std::set<unsigned int>& Bindices,
+    std::map<std::pair<unsigned int, unsigned int>, std::string>& FileList);
 
-int main()
+int main(int argc, char* argv[])
 {
-  int nValid=10000;
-  TNtuple *Validity = new TNtuple("Validity", "Validity", "Valid:e:b:a:Vxerr:Vyerr:Vzerr");
-
-  // New version chooses to NOT write output to a file, but to instead just try to merge the files and validate the copy in memory.
-
-  const std::string dir = "gasfiles";
-  const std::string out = "Ar75_CF20_iso5.gas";
-
-  auto filename = [&](const int i)
-  {
-    return dir + "/PART_" + std::to_string(i) + ".gas";
-  };
-
-  Garfield::MediumMagboltz gas;
-  Garfield::MediumMagboltz gas0;
-
-  const std::string first = filename(0);
-  if (!std::filesystem::exists(first))
+  try
     {
-      std::cerr << "Missing first gas file: " << first << std::endl;
-      return 1;
-    }
-
-  if (!gas.LoadGasFile(first))
-    {
-      std::cerr << "Failed to load " << first << std::endl;
-      return 1;
-    }
-
-  // Gas 0 only loads the FIRST file.  This will test the memory validity of the merge...
-  if (!gas0.LoadGasFile(first))
-    {
-      std::cerr << "Failed to load " << first << std::endl;
-      return 1;
-    }
-
-  int nFiles = 1;
-  for (int i = 1; ; ++i)
-    {
-      const std::string file = filename(i);
-      
-      if (!std::filesystem::exists(file))
+      if (argc != 3)
 	{
-	  std::cout << "Stopping at first missing file: " << file << std::endl;
-	  break;
-	}
-      
-      std::cout << "Merging " << file << std::endl;
-      
-      if (!gas.MergeGasFile(file, true))
-	{
-	  std::cerr << "Failed to merge " << file << std::endl;
+	  std::cerr << "Usage:\n"
+		    << argv[0]
+		    << " path_to_gasfiles name_of_output_file\n";
 	  return 1;
 	}
       
-      ++nFiles;
-    }
-
-  //gas.WriteGasFile("test.gas");
-
-  // Now perform the validation test...
-  double emin=400;
-  double emax=400;
-  //double ne=1;
-
-  double bmin=1.15;
-  double bmax=1.45;
-  double nb=50;
-
-  double amin=0.0;
-  double amax=0.2;
-  //double na=50;
-
-  // Initialize using the current system time
-  TRandom3 Randy(time(0));  //new initialization each run
-  cout << endl << endl << "Valid Calls: "<< endl;
-  for (int i=0; i<nValid; i++)
-    {
-      double eMag   = Randy.Uniform(emin, emax);
-      double bMag   = Randy.Uniform(bmin, bmin+0.2*(bmax-bmin)/nb);  // Comes from file0...
-      double a      = Randy.Uniform(amin, amax);
-      double PHI    = Randy.Uniform(0.0,2.0*TMath::Pi());
-
-      double ex     = 0;
-      double ey     = 0;
-      double ez     = eMag;
-
-      double bx     = bMag * sin(a) * cos(PHI);
-      double by     = bMag * sin(a) * sin(PHI);
-      double bz     = bMag * cos(a);
-
-      double vx;      
-      double vy;      
-      double vz;      
-
-      double vx0;      
-      double vy0;      
-      double vz0;      
-
-      gas.ElectronVelocity(ex, ey, ez, bx, by, bz, vx, vy, vz);
-      gas0.ElectronVelocity(ex, ey, ez, bx, by, bz, vx0, vy0, vz0);
-
-      /*
-      cout << "  i:" <<i;
-      cout << "  Ex:"<<ex;
-      cout << "  Ey:"<<ey;
-      cout << "  Ez:"<<ez;
-      cout << "  Bx:"<<bx;
-      cout << "  By:"<<by;
-      cout << "  Bz:"<<bz;
-      cout << "  Vx:"<<vx;
-      cout << "  Vy:"<<vy;
-      cout << "  Vz:"<<vz;
-      cout << endl;
-      cout << "  i:" <<i;
-      cout << "  Ex:"<<ex;
-      cout << "  Ey:"<<ey;
-      cout << "  Ez:"<<ez;
-      cout << "  Bx:"<<bx;
-      cout << "  By:"<<by;
-      cout << "  Bz:"<<bz;
-      cout << "  Vx0:"<<vx0;
-      cout << "  Vy0:"<<vy0;
-      cout << "  Vz0:"<<vz0;
-      cout << "  Vx%:"<<(vx-vx0)/vx;
-      cout << "  Vy%:"<<(vy-vy0)/vy;
-      cout << "  Vy%:"<<(vz-vz0)/vz;
-      cout << endl;
-      cout << endl;
-      */
+      const std::string path = argv[1];
+      const std::string output = path + "/" + argv[2];
       
-      double DelVx = (vx-vx0)/((vx+vx0)/2.);
-      double DelVy = (vy-vy0)/((vy+vy0)/2.);
-      double DelVz = (vz-vz0)/((vz+vz0)/2.);
-      Validity->Fill(1,sqrt(ex*ex + ey*ey + ez*ez),sqrt(bx*bx + by*by + bz*bz),a,DelVx, DelVy, DelVz);
+      std::set<unsigned int> Eindices;
+      std::set<unsigned int> Bindices;
+      std::map<std::pair<unsigned int, unsigned int>, std::string> FileList;
+      
+      if (!searchAndUnpackDirectory(path, Eindices, Bindices, FileList))
+	{
+	  std::cerr << PHWHERE << " Imperfect directory." << std::endl;
+	  return 1;
+	}
+      
+      Garfield::MediumMagboltz gas;
+      
+      for (const auto Eindex : Eindices)
+	{
+	  bool firstB = true;
+	  
+	  for (const auto Bindex : Bindices)
+	    {
+	      const auto it = FileList.find({Eindex, Bindex});
+	      if (it == FileList.end())
+		{
+		  std::cerr << PHWHERE << " Missing file for E=" << Eindex
+			    << " B=" << Bindex << std::endl;
+		  return 1;
+		}
+	      
+	      const std::string& nextfile = it->second;
+	      
+	      if (firstB)
+		{
+		  gas.LoadGasFile(nextfile);
+		  firstB = false;
+		}
+	      else
+		{
+		  gas.MergeGasFile(nextfile, true);
+		}
+	    }
+	  
+	  const std::string mergedFile = mergedName(path, Eindex);
+	  
+	  std::cout << "Writing " << mergedFile << std::endl;
+	  gas.WriteGasFile(mergedFile);
+	  
+	  std::vector<double> nE;
+	  std::vector<double> nB;
+	  std::vector<double> nA;
+	  gas.GetFieldGrid(nE, nB, nA);
+	  
+	  std::cout << "Merged Gas File created: "<< mergedFile
+		    << " with Grid Dimensions: " 
+		    << nE.size() << " E-fields, " 
+		    << nB.size() << " B-fields, " 
+		    << nA.size() << " Angles." << std::endl;
+	}
+      
+      bool firstE = true;
+      
+      for (const auto Eindex : Eindices)
+	{
+	  //if (Eindex > 10) {break;}
+	  const std::string mergedFile = mergedName(path, Eindex);
+	  
+	  if (!fs::exists(mergedFile))
+	    {
+	      std::cerr << PHWHERE << " Missing merged file " << mergedFile << std::endl;
+	      return 1;
+	    }
+	  
+	  if (firstE)
+	    {
+	      gas.LoadGasFile(mergedFile);
+	      firstE = false;
+	    }
+	  else
+	    {
+	      gas.MergeGasFile(mergedFile, true);
+	    }
+	}
+      
+      std::cout << "Writing final file " << output << std::endl;
+      gas.WriteGasFile(output);
+      
+      std::vector<double> nE;
+      std::vector<double> nB;
+      std::vector<double> nA;
+      gas.GetFieldGrid(nE, nB, nA);
+      
+      std::cout << "Final Gas File created: "<< output
+		<< " with Grid Dimensions: " 
+		<< nE.size() << " E-fields, " 
+		<< nB.size() << " B-fields, " 
+		<< nA.size() << " Angles." << std::endl;
+      
+      return 0;
     }
-  
-  cout << endl << endl << "Invalid Calls: "<< endl;
-  for (int i=0; i<nValid; i++)
+
+  catch (const std::exception& e)
     {
-      double eMag   = Randy.Uniform(emin, emax);
-      double bMag   = Randy.Uniform(bmin+5.0*(bmax-bmin)/nb, bmax);  // Comes from beyond file0...
-      double a      = Randy.Uniform(amin, amax);
-      double PHI    = Randy.Uniform(0.0,2.0*TMath::Pi());
-
-      double ex     = 0;
-      double ey     = 0;
-      double ez     = eMag;
-
-      double bx     = bMag * sin(a) * cos(PHI);
-      double by     = bMag * sin(a) * sin(PHI);
-      double bz     = bMag * cos(a);
-
-      double vx;      
-      double vy;      
-      double vz;      
-      double vx0;      
-      double vy0;      
-      double vz0;      
-      gas.ElectronVelocity(ex, ey, ez, bx, by, bz, vx, vy, vz);
-      gas0.ElectronVelocity(ex, ey, ez, bx, by, bz, vx0, vy0, vz0);
-      /*
-      cout << "  i:" <<i;
-      cout << "  Ex:"<<ex;
-      cout << "  Ey:"<<ey;
-      cout << "  Ez:"<<ez;
-      cout << "  Bx:"<<bx;
-      cout << "  By:"<<by;
-      cout << "  Bz:"<<bz;
-      cout << "  Vx:"<<vx;
-      cout << "  Vy:"<<vy;
-      cout << "  Vz:"<<vz;
-      cout << endl;
-      cout << "  i:" <<i;
-      cout << "  Ex:"<<ex;
-      cout << "  Ey:"<<ey;
-      cout << "  Ez:"<<ez;
-      cout << "  Bx:"<<bx;
-      cout << "  By:"<<by;
-      cout << "  Bz:"<<bz;
-      cout << "  Vx0:"<<vx0;
-      cout << "  Vy0:"<<vy0;
-      cout << "  Vz0:"<<vz0;
-      cout << "  Vx%:"<<(vx-vx0)/vx;
-      cout << "  Vy%:"<<(vy-vy0)/vy;
-      cout << "  Vy%:"<<(vz-vz0)/vz;
-      cout << endl;
-      cout << endl;
-      */
-      double DelVx = (vx-vx0)/((vx+vx0)/2.);
-      double DelVy = (vy-vy0)/((vy+vy0)/2.);
-      double DelVz = (vz-vz0)/((vz+vz0)/2.);
-      Validity->Fill(0,sqrt(ex*ex + ey*ey + ez*ez),sqrt(bx*bx + by*by + bz*bz),a,DelVx, DelVy, DelVz);
+      std::cerr << PHWHERE << " Exception: " << e.what() << std::endl;
+      return 1;
     }
-  
+  catch (...)
+    {
+      std::cerr << PHWHERE << " Unknown exception." << std::endl;
+      return 1;
+    }
+}
 
-  TFile *output= new TFile("GarfieldValidity.root","RECREATE");
-  Validity->Write();
-  output->Close();
-  
-  return 0;
+bool searchAndUnpackDirectory(const std::string& directoryPath, std::set<unsigned int> &Eindices, std::set<unsigned int> &Bindices, std::map<std::pair<unsigned int, unsigned int>, std::string> &FileList)
+{
+    // Check if the directory exists and is valid
+    if (!fs::exists(directoryPath) || !fs::is_directory(directoryPath))
+      {
+        std::cerr << "Error: Invalid directory path." << std::endl;
+        return false;
+      }
+
+    std::regex filePattern(R"(^E([0-9]{3})_B([0-9]{3})\.gas$)");
+    std::smatch matchResults;
+
+    // Iterate through all items in the directory
+    for (const auto& entry : fs::directory_iterator(directoryPath))
+      {
+        // Only process regular files
+        if (entry.is_regular_file())
+	  {
+	    std::string filename = entry.path().filename().string();
+	    
+	    // Check if the filename matches our target pattern
+	    if (std::regex_match(filename, matchResults, filePattern))
+	      {
+		// matchResults[1] contains the string after 'E'
+		// matchResults[2] contains the string after 'B'
+		// std::stoul automatically handles leading zeros
+		unsigned int eValue = std::stoul(matchResults[1].str());
+		unsigned int bValue = std::stoul(matchResults[2].str());
+		Eindices.insert(eValue);
+		Bindices.insert(bValue);
+		FileList[{eValue, bValue}] = entry.path().string();
+	      }
+	  }
+      }
+
+    // Validate the results.
+    if (Eindices.empty()) { return false; }
+    if (Bindices.empty()) { return false; }
+
+    unsigned int maxE = *Eindices.rbegin(); 
+    unsigned int maxB = *Bindices.rbegin();
+    for (unsigned int i=0; i<=maxE; i++)
+      {
+	for (unsigned int j=0; j<=maxB; j++)
+	  {
+	    if ( !FileList.contains({i,j}) ) { return false; }
+	  }
+      }
+
+    std::cout << "   *** Gas File List Valid ***" << std::endl;
+    std::cout << "Electric field indices 0 --> " << maxE << std::endl;
+    std::cout << "Magnetic field indices 0 --> " << maxB << std::endl;
+    
+    return true;
+}
+
+std::string mergedName(const std::string& path, unsigned int eindex)
+{
+  std::ostringstream name;
+  name << path << "/MERGED_E"
+       << std::setw(3) << std::setfill('0') << eindex
+       << ".gas";
+  return name.str();
 }
